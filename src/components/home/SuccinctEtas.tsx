@@ -1,7 +1,8 @@
 import { useContext } from "react";
 import { Box, SxProps, Theme, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
-import { useEtas } from "../../hooks/useEtas";
+import { useEtasStatus } from "../../hooks/useEtas";
+import useOnline from "../../hooks/useOnline";
 import AppContext from "../../context/AppContext";
 import { Eta } from "hk-bus-eta";
 import { Schedule as ScheduleIcon } from "@mui/icons-material";
@@ -26,7 +27,8 @@ const SuccinctEtas = ({
   const {
     db: { routeList },
   } = useContext(DbContext);
-  const _etas = useEtas(routeId, Boolean(value));
+  const { etas: _etas, failed } = useEtasStatus(routeId, Boolean(value));
+  const offline = useOnline() === "offline";
   const etas = value ?? _etas;
   const isCoop = routeList[routeId.split("/")[0]].co.length > 1;
 
@@ -37,6 +39,10 @@ const SuccinctEtas = ({
   ) => {
     if (!eta || !eta.eta) {
       if (isEndOfTrainLine && seq === 0) return t("終點站");
+      // only the lead slot speaks; later slots stay blank when there is no next bus
+      // an offline fetch resolves [], which must not read as "no service"
+      if (seq === 0 && offline) return t("離線");
+      if (seq === 0) return eta?.remark?.[language] || t("暫無班次");
       return "";
     } else {
       const waitTime = Math.round(
@@ -81,28 +87,39 @@ const SuccinctEtas = ({
       const exactTimeJsx = (
         <Box
           component="span"
-          sx={{ fontSize: etaFormat !== "exact" ? "0.9em" : "1em" }}
+          sx={{
+            fontSize:
+              etaFormat !== "exact" ? "0.9em" : highlight ? "1.5em" : "1em",
+            fontWeight: highlight && etaFormat === "exact" ? 700 : undefined,
+          }}
         >
           {eta.eta.slice(11, 16)}
         </Box>
       );
 
       const isTrain = eta.co === "mtr" || eta.co === "lightRail";
+      const isDue = waitTime < (isTrain ? 2 : 1);
       const waitTimeJsx = (
         <Box component="span">
           <Box
             component="span"
             sx={{
               ...waitTimeSx,
+              // first ETA leads the row; later ones stay at the base size.
+              // "due" is a word, not a number, so it keeps the base size
+              ...(highlight &&
+                !isDue && { fontSize: "1.65em", lineHeight: 1.1 }),
               color: (theme) =>
                 highlight ? theme.palette.warning.main : "inherit",
             }}
           >
-            {waitTime < (isTrain ? 2 : 1) ? " - " : `${waitTime} `}
+            {isDue ? t("即將抵達") : `${waitTime} `}
           </Box>
-          <Box component="span" sx={{ fontSize: "0.8em" }}>
-            {t("分鐘")}
-          </Box>
+          {!isDue && (
+            <Box component="span" sx={{ fontSize: "0.8em" }}>
+              {t("分鐘")}
+            </Box>
+          )}
         </Box>
       );
       return (
@@ -122,13 +139,17 @@ const SuccinctEtas = ({
 
   return (
     <Box display="flex" flexDirection="column" textAlign="right">
-      <Typography component="h5" color="textPrimary" sx={primarySx}>
-        {etas ? getEtaString(etas[0], 0, true) : ""}
+      <Typography component="div" color="textPrimary" sx={primarySx}>
+        {etas
+          ? getEtaString(etas[0], 0, true)
+          : failed || offline
+            ? t(offline ? "離線" : "無法載入")
+            : t("載入中")}
       </Typography>
-      <Typography component="h6" color="textSecondary" sx={secondarySx}>
+      <Typography component="div" color="textSecondary" sx={secondarySx}>
         {etas ? getEtaString(etas[1], 1) : ""}
       </Typography>
-      <Typography component="h6" color="textSecondary" sx={secondarySx}>
+      <Typography component="div" color="textSecondary" sx={secondarySx}>
         {etas ? getEtaString(etas[2], 2) : ""}
       </Typography>
     </Box>
@@ -139,6 +160,7 @@ export const SingleTrainIcon = () => (
   // https://pictogrammers.com/library/mdi/icon/train-car-passenger-door/
   <svg
     xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true"
     viewBox="0 0 24 24"
     style={{
       marginRight: 8,
@@ -148,7 +170,6 @@ export const SingleTrainIcon = () => (
       fill: "currentcolor",
     }}
   >
-    <title>train-car-passenger-door</title>
     <path d="M21 7H3C1.9 7 1 7.9 1 9V17H2C2 18.11 2.9 19 4 19S6 18.11 6 17H18C18 18.11 18.9 19 20 19S22 18.11 22 17H23V9C23 7.9 22.11 7 21 7M7 12H3V9H7V12M11 16H9V9H11V16M15 16H13V9H15V16M21 12H17V9H21V12Z" />
   </svg>
 );
@@ -158,6 +179,7 @@ export const DoubleTrainIcon = () => (
   <>
     <svg
       xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
       viewBox="0 0 24 24"
       style={{
         width: "1em",
@@ -166,11 +188,11 @@ export const DoubleTrainIcon = () => (
         fill: "currentcolor",
       }}
     >
-      <title>train-car-passenger-door</title>
       <path d="M21 7H3C1.9 7 1 7.9 1 9V17H2C2 18.11 2.9 19 4 19S6 18.11 6 17H18C18 18.11 18.9 19 20 19S22 18.11 22 17H23V9C23 7.9 22.11 7 21 7M7 12H3V9H7V12M11 16H9V9H11V16M15 16H13V9H15V16M21 12H17V9H21V12Z" />
     </svg>
     <svg
       xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
       viewBox="0 0 24 24"
       style={{
         marginRight: 8,
@@ -180,7 +202,6 @@ export const DoubleTrainIcon = () => (
         fill: "currentcolor",
       }}
     >
-      <title>train-car-passenger-door</title>
       <path d="M21 7H3C1.9 7 1 7.9 1 9V17H2C2 18.11 2.9 19 4 19S6 18.11 6 17H18C18 18.11 18.9 19 20 19S22 18.11 22 17H23V9C23 7.9 22.11 7 21 7M7 12H3V9H7V12M11 16H9V9H11V16M15 16H13V9H15V16M21 12H17V9H21V12Z" />
     </svg>
   </>
@@ -191,6 +212,7 @@ export default SuccinctEtas;
 const primarySx: SxProps<Theme> = {
   whiteSpace: "nowrap",
   fontSize: "1em",
+  fontVariantNumeric: "tabular-nums",
 };
 
 const secondarySx: SxProps<Theme> = {
@@ -199,11 +221,10 @@ const secondarySx: SxProps<Theme> = {
   lineHeight: "1.43",
   whiteSpace: "nowrap",
   textAlign: "right",
-  opacity: 0.8,
+  fontVariantNumeric: "tabular-nums",
 };
 
 const waitTimeSx: SxProps<Theme> = {
   fontSize: "1.1em",
   fontWeight: "700",
-  color: "#088bce",
 };

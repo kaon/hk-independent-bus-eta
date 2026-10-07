@@ -23,6 +23,7 @@ import {
   getDistance,
   getDistanceWithUnit,
   getJoyYouFare,
+  getLineColor,
   toProperCase,
   vibrate,
 } from "../../utils";
@@ -147,13 +148,26 @@ const SuccinctTimeReport = ({
 
   return (
     <>
-      <ListItem onClick={handleClick} sx={rootSx}>
+      <ListItem
+        onClick={handleClick}
+        // rows navigate on click, so expose them as links to keyboard and AT users
+        {...(mode === "time" && {
+          role: "link",
+          tabIndex: 0,
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === "Enter" && e.target === e.currentTarget)
+              handleClick(e as unknown as React.MouseEvent);
+          },
+        })}
+        sx={rootSx}
+      >
         <ListItemText
           primary={
             <Box overflow="hidden">
               <RouteNo
                 routeNo={language === "zh" ? t(routeNo) : routeNo}
                 fontSize={co[0] === "mtr" ? "1.4667em" : undefined}
+                lineColor={getLineColor(co, routeNo)}
               />
               {parseInt(serviceType, 10) >= 2 && (
                 <Typography variant="caption" sx={specialTripSx}>
@@ -163,7 +177,7 @@ const SuccinctTimeReport = ({
             </Box>
           }
           secondary={
-            <Typography component="h4" variant="caption" sx={companySx}>
+            <Typography component="div" variant="caption" sx={companySx}>
               {co.map((co) => t(co)).join("+")}
             </Typography>
           }
@@ -171,7 +185,7 @@ const SuccinctTimeReport = ({
         <ListItemText
           primary={
             <Typography
-              component="h3"
+              component="div"
               variant="h6"
               color="textPrimary"
               sx={fromToWrapperSx}
@@ -192,7 +206,7 @@ const SuccinctTimeReport = ({
             />
           }
           secondaryTypographyProps={{
-            component: "h4",
+            component: "div",
             variant: "subtitle2",
           }}
           sx={routeDestSx}
@@ -257,7 +271,7 @@ const rootSx: SxProps<Theme> = {
   gap: (theme) => theme.spacing(1),
   gridTemplateColumns: "15% 1fr minmax(18%, max-content)",
   padding: (theme) => `${theme.spacing(0.5)} ${theme.spacing(1)}`,
-  color: "rgba(0,0,0,0.87)",
+  color: (theme) => theme.palette.text.primary,
   cursor: "pointer",
   WebkitTapHighlightColor: "transparent",
   transition: "background-color 0.12s ease-out",
